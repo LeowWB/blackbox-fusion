@@ -4,6 +4,7 @@ from sklearn import datasets
 import random, math
 
 class Surrogate:
+    # self.w is weights
     def __init__(self, n_params):
         self.w = np.zeros(n_params)
         self.n_params = n_params
@@ -15,8 +16,11 @@ class GPSurrogate(Surrogate):
     def __init__(self, n_params, X, Y):
         Surrogate.__init__(self, n_params)
         self.X = X
+
+        # instead of storing all the Y's, we store the mean of the Y's and the difference of each Y from the mean.
         self.Y_mean = np.mean(Y)
         self.Y = Y - self.Y_mean
+        
         self.KXX = np.eye(X.shape[0])
         self.KXX_inv = np.eye(X.shape[0])
 
@@ -74,6 +78,7 @@ class GPSurrogate(Surrogate):
         pr = -0.5 * ((y - ym) ** 2) / yv
         return np.log(1.0 / (np.sqrt(2.0 * np.pi) * (yv ** 0.5))) + pr
 
+    # compute_var -> whether we compute the variance (uncertainty of prediction)
     def predict(self, x, compute_var=False, compute_d=False, w_ext=None):
         if w_ext is None:
             w_ext = self.w
@@ -81,11 +86,13 @@ class GPSurrogate(Surrogate):
         ktX = self.kernel2(x, self.X, signal, ls)
         temp1 = np.dot(ktX, self.KXX_inv)
         temp2 = np.dot(self.KXX_inv, self.Y)
+
+        # prediction for y. the addition of self.Y_mean is because we took it out earlier during initialization
         ypred = np.dot(temp1, self.Y) + self.Y_mean
 
         if compute_var:
             ktt = self.kernel2(x, x, signal, ls)
-            yvar = ktt - np.dot(temp1, np.transpose(ktX))
+            yvar = ktt - np.dot(temp1, np.transpose(ktX)) # variance of y; represents uncertainty (this is a GP surrogate)
             if yvar[0, 0] < 0:
                 print(str(ktX))
                 print(str(ktt))
@@ -142,7 +149,10 @@ class GPSurrogate(Surrogate):
 
         return d
 
+    # essentially asks the surrogate: given this x and y, in what direction should i nudge y so that
+    # i can get the fastest increase in p(y|x...)?
     def dy(self, x, y):
+        # ym, yv are the mean/variance of the distribution of y given x.
         ym, yv = self.predict(x, compute_var=True, compute_d=False)
         return (ym - y) / yv
 
@@ -166,6 +176,7 @@ class GPSurrogate(Surrogate):
 
 class LinearSurrogate(Surrogate):
     def __init__(self, n_params):
+        # n_params is number of features of each datum?
         Surrogate.__init__(self, n_params)
 
     def extract_params(self, ww):
@@ -202,6 +213,8 @@ class LinearSurrogate(Surrogate):
 
         return d
 
+    # essentially asks the surrogate: given this x and y, in what direction should i nudge y so that
+    # i can get the fastest increase in p(y|x...)?
     def dy(self, x, y):
         #sigma, bias, coeff = self.extract_params(self.w)
         xw = self.bias + np.dot(x, self.coeff)[0]

@@ -7,6 +7,9 @@ import random
 import time
 import copy
 
+# X - (unlabeled) data to be used in fusion, and upon which the post-fusion models will be tested.
+# YY - ground truth labels for the data in X. not actly needed for fusion, only here for testing fused model quality.
+# return value: Y (2d array). each elem corresponds to a datum in X, and contains each surrogate's post-fusion prediction of the label for that datum.
 def fuse_surrogate(exp_name, sur, X, YY, n_iter=100, lr=2):
     Y = np.zeros((X.shape[0], len(sur)))
     g = open(result_folder() + exp_name + "_test.txt", "w+")
@@ -14,19 +17,19 @@ def fuse_surrogate(exp_name, sur, X, YY, n_iter=100, lr=2):
     tm = open(result_folder() + exp_name + "_dectime.txt", "w+")
     dec_time = 0
     lin_time = 0
-    for i in range(X.shape[0]):
+    for i in range(X.shape[0]): # for each datum
         # init y-candidates
         t1 = time.time()
         f = open(result_folder() + exp_name + "_profile" + str(i) + ".txt", "w+")
         x = X[i].reshape((1, X.shape[1]))
-        for j in range(X.shape[1]):
+        for j in range(X.shape[1]): # prints the features of the current input datum
             g.write(str(x[0, j]))
             if j == X.shape[1] - 1:
                 g.write("\n")
             else:
                 g.write(",")
         h.write(str(YY[i, 0]) + "\n")
-        ysur = np.zeros(len(sur))
+        ysur = np.zeros(len(sur))   # array of all the surrogates' predictions for this input
         print("Fusing prediction for test point #" + str(i))
         t2 = time.time()
         for j in range(len(sur)):
@@ -39,11 +42,22 @@ def fuse_surrogate(exp_name, sur, X, YY, n_iter=100, lr=2):
             else:
                 f.write(",")
         print("Initial guess " + str(ysur) + " Truth = " + str(YY[i,0]))
+        
+        # this is the fusion part. note that the surrogates themselves never change. the fusion is
+        # literally just asking each surrogate to make a prediction in ysur, then slowly nudging those
+        # predictions until they converge. for each prediction y (aka ysur[i]), y is nudged in the direction that
+        # leads to the fastest increase in p(y|x,...); in other words, the direction of the gradient.
+        # in this manner, by the time the predictions converge, we'll have made it such that the new
+        # converged prediction has a higher probability of being correct than the original predictions.
         for t in range(n_iter):
-            dysur = np.zeros(len(sur))
+            dysur = np.zeros(len(sur)) # global gradient. it's an array because each surrogate's prediction will be updated using a diff global gradient.
             for j1 in range(len(sur)):
                 for j2 in range(len(sur)):
-                    grad = sur[j2].dy(x, ysur[j1])
+                    # the global gradient for a surrogate (j1) depends on the gradients of all surrogates at the point of j1's prediction for the current input.
+                    # essentially for each prediction ysur[j1], we ask all models: how should we change ysur[j1] so that p(ysur[j1] | x...) is maximized?
+                    # (i.e. what's the gradient?) then we sum all the gradients to get our global gradient, and nudge ysur[j1] in that direction.
+                    # in this way, each prediction will slowly be changed into a new prediction that's more likely to be correct given x.
+                    grad = sur[j2].dy(x, ysur[j1]) # note that dy takes on more extreme values when j2 and j1's predictions are more different.
                     dysur[j1] += grad
             for j in range(len(sur)):
                 #print(str(j) + " " + str(ysur[j]) + " " + str(dysur[j]))
@@ -54,6 +68,9 @@ def fuse_surrogate(exp_name, sur, X, YY, n_iter=100, lr=2):
                 else:
                     f.write(",")
             #print(str(ysur)  + " Truth = " + str(YY[i,0]))
+        
+        # fusion done.
+
         print("Post-fusion " + str(ysur) + " Truth = " + str(YY[i,0]))
         for j in range(len(sur)):
             Y[i, j] = ysur[j]
@@ -430,13 +447,21 @@ def colbi2(X, Y, exp_name, box_type, trp_type, sur_type, box_size=50, test_size=
     print("Average Sur RMSE post-fusion = " + str(sum(post_sur_rmse) / len(sur)))
 
 
+# box_type, trp_type, sur_type are types of blackbox model, transport func (h(eta; u)), and surrogate. all are lists, each elem represents one model.
+# i think box_size is num of data used to train blackbox?
 def colbi(X, Y, exp_name, box_type, trp_type, sur_type, box_size=50, test_size=500):
+    print(f'Beginning colbi() function')
+
     nb = len(box_type)
     kf = model_selection.KFold(n_splits = nb + 2)
+    # Xb, Yb, Xs, Ys, Xt, Yt are *lists* of test data
+    # i think these correspond to blackbox, surrogate, transportfunc. or does t stand for test?
     Xb = []
     Yb = []
     fold_no = 0
-    for train_index, test_index in kf.split(X):
+    
+    for train_index, test_index in kf.split(X): # note that train_index, test_index are arrays
+        # we have 1-fold worth of data for the surrogate/transport, but nb folds worth for the blackbox
         if fold_no < nb:
             Xb.append(X[test_index])
             Yb.append(Y[test_index].reshape((len(test_index), 1)))
@@ -448,14 +473,18 @@ def colbi(X, Y, exp_name, box_type, trp_type, sur_type, box_size=50, test_size=5
             Yt = Y[test_index].reshape((len(test_index), 1))
         fold_no += 1
 
-    id = np.random.choice(range(Xs.shape[0]),min(box_size, Xs.shape[0]), replace=False)
+    id = np.random.choice(range(Xs.shape[0]),min(box_size, Xs.shape[0]), replace=False) # id is an array
     Xs = Xs[id, :]
 
+    # lists of blackboxes, surrogates, transport funcs
     box = []
     sur = []
     trp = []
+
+    # for each blackbox (this loop creates blackboxes, surrogates, and transportfuncs)
     for b in range(nb):
         print("Fitting Surrogate #" + str(b))
+        # create the black boxes.
         if box_type[b] == "SGP":
             id = np.random.choice(range(Xb[b].shape[0]), min(box_size, Xb[b].shape[0]), replace=False)
             Xsu = Xb[b][id, :]
@@ -467,21 +496,24 @@ def colbi(X, Y, exp_name, box_type, trp_type, sur_type, box_size=50, test_size=5
             Ysu = Yb[b][id, :]
             bx = BRR_BlackBox(Xsu, Ysu.reshape(Ysu.shape[0]))
 
+        # create surrogates
         if sur_type[b] == "Lin":
             su = LinearSurrogate(X.shape[1])
             su.sigma = np.log(2.0)
             su.bias = 5
             su.unfold()
         elif sur_type[b] == "FGP":
-            id = np.random.choice(range(Xb[b].shape[0]), min(box_size, Xb[b].shape[0]), replace=False)
+            id = np.random.choice(range(Xb[b].shape[0]), min(box_size, Xb[b].shape[0]), replace=False) # sample some data from Xb[b]
             Xsu = Xb[b][id, :]
             Ysu = Yb[b][id, :]
             su = GPSurrogate(Xb[b].shape[1] + 2, Xsu, Ysu)
             su.precompute_inv()
 
+        # create transportfuncs
         if trp_type[b] == "Aff":
             tr = AffineTransport(u=np.asarray([np.exp(1), 1]))
 
+        # Xtu is a subset of Xt. it's an array because id is an array.
         id = np.random.choice(range(Xt.shape[0]), min(box_size, Xt.shape[0]), replace=False)
         Xtu = Xt[id, :]
 
@@ -490,9 +522,16 @@ def colbi(X, Y, exp_name, box_type, trp_type, sur_type, box_size=50, test_size=5
         trp.append(tr)
 
         sur[b], trp[b] = fit_surrogate(box[b], sur[b], trp[b], Xtu)
+
+    # by this point, the blackboxes, surrogates, transportfuncs have been created
+
     f1 = open(result_folder() + exp_name + "_disagreement.txt", "w+")
     f2 = open(result_folder() + exp_name + "_fusion_rmse.txt", "w+")
 
+    # Xtu and Ytu are *subsets* of Xt and Yt. note that both Xtu and Ytu are arrays because id is an array.
+    # Xtu represents (unlabeled) data which will be used in the surrogate fusion, and upon which the fused
+    # model's quality will be tested. Ytu is the labels for Xtu; it's not needed in the fusion, but it's
+    # useful for determining fused model accuracy.
     id = np.random.choice(range(Xt.shape[0]), min(test_size, Xt.shape[0]), replace=False)
     Xtu = Xt[id, :]
     Ytu = Yt[id, :]

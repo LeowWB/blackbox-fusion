@@ -7,6 +7,7 @@ import random
 import keras
 
 class BlackBox:
+    # X, Y are literally the training data.
     def __init__(self, X, Y):
         #do something
         self.X = X
@@ -45,7 +46,7 @@ class SGP_BlackBox(BlackBox):
         BlackBox.__init__(self, X, Y)
         #Z = 2.0 * np.random.rand(int(np.sqrt(X.shape[0])), X.shape[1])
         K = kern.RBF(X.shape[1], 1.0, 1.0 * np.ones(X.shape[1]), ARD=True)
-        self.m = models.SparseGPRegression(X, Y, Z=Z, kernel=K)
+        self.m = models.SparseGPRegression(X, Y, Z=Z, kernel=K) # Z is "inducing inputs"
         self.m.optimize('bfgs', max_iters = 200)
 
     def query(self, x, y):

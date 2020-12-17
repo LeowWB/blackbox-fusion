@@ -106,8 +106,14 @@ def main():
     #post_process("cigar_aimpeak_sgpbb", 500, 41)
     #post_process("cigar_aimpeak_mixbb", 500, 41)
     #post_process("colbi_aimpeak_timeslice_sgpbb", 500, 101)
-    post_process("colbi_aimpeakfull_timeslice_sgpbb", 500, 101)
+    #post_process("colbi_aimpeakfull_timeslice_sgpbb", 500, 101)
     #post_process("cigar_aimpeak_timeslice_sgpbb", 500, 41)
+
+    """
+    don't think we can run post_process cuz we dh a lot of files. anyw the stuff below's mine
+    """
+    from colbi import experiment_5
+    experiment_5()
 
 if __name__ == "__main__":
     main()
