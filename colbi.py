@@ -134,6 +134,7 @@ def fuse_surrogate2(exp_name, sur, X, YY, n_iter=40):
 
     return Y
 
+# the X here is actly Xtu.
 def fit_surrogate(bb, su, tr, X, ne=1, n_iter=20):
     for i in range(n_iter):
         start = time.time()
@@ -144,25 +145,33 @@ def fit_surrogate(bb, su, tr, X, ne=1, n_iter=20):
             ww[t] = np.exp(su.w[t])
         for t in range(tr.u.shape[0]):
             uu[t] = np.exp(tr.u[t])
+        
+        # ww contains e^x for x in su's weights. same for uu and tr's u.
         print(str(ww))
         print(str(uu))
+
         du = np.zeros(2)
         dw = np.zeros(su.n_params)
+        
+        # these are the epsilon noise terms in the paper. all sampled from N(0,1)        
         epw = np.zeros(ne)
         epu = np.zeros(ne)
         for j in range(ne):
             epw[j] = random.gauss(0, 1)
             epu[j] = random.gauss(0, 1)
 
+        # for each datum
         for j in range(X.shape[0]):
-            x = X[j].reshape(1, X.shape[1])
+            x = X[j].reshape(1, X.shape[1]) # flatten datum into a 1d vector
+
             # Compute dL/du = dL/dy * dy/du
             for eps in epu:
-                y = tr.h(eps)
-                dyp = bb.dy(x, y)
+                y = tr.h(eps)           # makes sense, paper substitutes y with h(eps; u)
+                dyp = bb.dy(x, y)       # "given this x and y, how shld i nudge y to have the fastest increase in p(y|x)?"
                 dyq = su.dy(x, y)
-                du += (dyq - dyp) * tr.du(eps) / X.shape[0]
+                du += (dyq - dyp) * tr.du(eps) / X.shape[0] # bracketed term is dL/dy; tr.du(eps) is dy/du.
             du /= ne
+
             # Compute dL/dw
             for eps in epw:
                 y = tr.h(eps)
@@ -447,7 +456,7 @@ def colbi2(X, Y, exp_name, box_type, trp_type, sur_type, box_size=50, test_size=
     print("Average Sur RMSE post-fusion = " + str(sum(post_sur_rmse) / len(sur)))
 
 
-# box_type, trp_type, sur_type are types of blackbox model, transport func (h(eta; u)), and surrogate. all are lists, each elem represents one model.
+# box_type, trp_type, sur_type are types of blackbox model, transport func (h(eps; u)), and surrogate. all are lists, each elem represents one model.
 # i think box_size is num of data used to train blackbox?
 def colbi(X, Y, exp_name, box_type, trp_type, sur_type, box_size=50, test_size=500):
     print(f'Beginning colbi() function')
