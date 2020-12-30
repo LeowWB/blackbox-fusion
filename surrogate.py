@@ -4,7 +4,8 @@ from sklearn import datasets
 import random, math
 
 class Surrogate:
-    # self.w is weights
+    # self.w is related to weights. i believe they're not the "real" weights - idt they're dotproduct-ed with the input.
+    # seems like e^w is used instead for LinearSurrogate; not sure about GPSurrogate.
     def __init__(self, n_params):
         self.w = np.zeros(n_params)
         self.n_params = n_params
@@ -135,6 +136,8 @@ class GPSurrogate(Surrogate):
         yw = self.predict(x)
         return np.abs(yw - y)
 
+    # given this x and y, in what direction should i nudge the weights of the surrogate so that
+    # i can make my prediction (xw) approach y the fastest?
     def dw(self, x ,y, w_ext=None):
         if w_ext is None:
             w_ext = self.w
@@ -189,6 +192,7 @@ class LinearSurrogate(Surrogate):
         Surrogate.update(self, i, dw, lr)
         self.unfold()
 
+    # populates self.coeff; each element is e^x for x in weights.
     def unfold(self):
         self.coeff = np.fromiter(map(np.exp, self.w), dtype=float)
 
@@ -202,13 +206,15 @@ class LinearSurrogate(Surrogate):
         #sigma, bias, coeff = self.extract_params(self.w)
         return self.bias + np.dot(x, self.coeff)[0]
 
+    # given this x and y, in what direction should i nudge the weights of the surrogate so that
+    # i can make my prediction (xw) approach y the fastest?
     def dw(self, x, y, w_ext=None):
         if w_ext is None:
             w_ext = self.w
 
         #sigma, bias, coeff = self.extract_params(w_ext)
         d = np.zeros(self.n_params)
-        xw = self.bias + np.dot(x, self.coeff)[0]
+        xw = self.bias + np.dot(x, self.coeff)[0] # xw is the prediction based on current weights (refer to predict(); it's the same code)
         d[:] = - 1.0 * (y - xw) * x[0, :] / (self.sigma ** 2)
 
         return d

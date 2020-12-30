@@ -135,6 +135,7 @@ def fuse_surrogate2(exp_name, sur, X, YY, n_iter=40):
     return Y
 
 # the X here is actly Xtu.
+# ne -> number of epsilons to use for each *datum*.
 def fit_surrogate(bb, su, tr, X, ne=1, n_iter=20):
     for i in range(n_iter):
         start = time.time()
@@ -166,9 +167,9 @@ def fit_surrogate(bb, su, tr, X, ne=1, n_iter=20):
 
             # Compute dL/du = dL/dy * dy/du
             for eps in epu:
-                y = tr.h(eps)           # makes sense, paper substitutes y with h(eps; u)
+                y = tr.h(eps)           # makes sense, paper substitutes y with h(eps; u).
                 dyp = bb.dy(x, y)       # "given this x and y, how shld i nudge y to have the fastest increase in p(y|x)?"
-                dyq = su.dy(x, y)
+                dyq = su.dy(x, y)       # note that this y isn't the true label of the datum, but rather the transport's output.
                 du += (dyq - dyp) * tr.du(eps) / X.shape[0] # bracketed term is dL/dy; tr.du(eps) is dy/du.
             du /= ne
 
@@ -510,7 +511,7 @@ def colbi(X, Y, exp_name, box_type, trp_type, sur_type, box_size=50, test_size=5
             su = LinearSurrogate(X.shape[1])
             su.sigma = np.log(2.0)
             su.bias = 5
-            su.unfold()
+            su.unfold() # this populates su.coeff, which is basically e^x for x in weights.
         elif sur_type[b] == "FGP":
             id = np.random.choice(range(Xb[b].shape[0]), min(box_size, Xb[b].shape[0]), replace=False) # sample some data from Xb[b]
             Xsu = Xb[b][id, :]

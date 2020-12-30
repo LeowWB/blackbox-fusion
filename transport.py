@@ -18,6 +18,8 @@ class AffineTransport(Transport):
     def __init__(self, u):
         Transport.__init__(self, u)
 
+    # a bunch of samples are taken from N(0,1), and each sample is fed to h. h will then produce outputs
+    # such that the outputs follow a distribution which is a scaled and translated version of the original.
     # eps is the epsilon in the paper. it's sampled from N(0,1).
     def h(self, eps):
         return eps * np.exp(self.u[0]) + np.exp(self.u[1])
